@@ -1,0 +1,88 @@
+# Agent Instructions
+
+This repository documents and patches a WorkBuddy custom-model compatibility bug.
+
+## Goal
+
+Help OpenClaw, Claude Code, Codex, or another local coding agent understand and reproduce the fix for strict OpenAI-compatible custom model providers.
+
+## Problem Summary
+
+WorkBuddy 4.22.x can send internal message fields to custom OpenAI-compatible `/chat/completions` providers.
+
+Example provider error:
+
+```text
+400 Extra inputs are not permitted, field: 'messages[1].agent', value: 'cli'
+```
+
+Rejected fields may include:
+
+```text
+agent, messageId, model, traceId, conversationRequestId, rawUsage, usage, reasoning, annotations
+```
+
+These are WorkBuddy internal fields. They should remain in WorkBuddy's local state and traces, but they should not be sent to third-party model APIs.
+
+## Patch Name
+
+Use this name consistently:
+
+```text
+workbuddy-custom-model-sanitizer
+```
+
+## Files Of Interest
+
+Default WorkBuddy CLI bundle:
+
+```text
+/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/dist/codebuddy.js
+```
+
+Default local custom model config:
+
+```text
+~/.workbuddy/models.json
+```
+
+In WorkBuddy 4.22.16, `models.json` is an array. Do not rewrite it as `{ "models": [...] }`, because that can break the WorkBuddy model picker UI.
+
+## Intended Fix
+
+Patch WorkBuddy's custom-model request path so outbound requests are sanitized before HTTP send.
+
+For custom models:
+
+- Keep: `role`, `content`, `name`, `tool_calls`, `tool_call_id`
+- Normalize roles to OpenAI-compatible values
+- Convert text content arrays to strings for text-only custom models
+- Convert unpaired tool results to user-visible text
+- Remove WorkBuddy-only metadata
+- Preserve tool calls when present
+- Leave WorkBuddy's local conversation storage alone
+
+The key idea is to sanitize at the outbound HTTP adapter layer, not only earlier in the request pipeline. Earlier plugins can be bypassed or followed by later transformations.
+
+## Verification
+
+After patching:
+
+```bash
+node --check /Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/dist/codebuddy.js
+```
+
+Then fully quit and restart WorkBuddy.
+
+If debugging is needed, inspect WorkBuddy process args:
+
+```bash
+ps aux | rg -i 'WorkBuddy|codebuddy|workbuddy'
+```
+
+## Safety
+
+- Always create a backup before editing `codebuddy.js`.
+- Do not commit API keys from `~/.workbuddy/models.json`.
+- Avoid changing unrelated app resources.
+- WorkBuddy updates may replace the patched file; rerun the patcher after updates.
