@@ -90,7 +90,9 @@ Model response adapter:
 Kimi K2.6 profile:
 
 - WorkBuddy has built-in Moonshot/Kimi plugins for `kimi-k2.5` and `kimi-k2.6`
-- Extend those exact plugin patterns to also match `kimi-k2p6` and `kimi-k2p6-turbo`
+- Extend only the tool-result content-array plugin to also match `kimi-k2p6` and `kimi-k2p6-turbo`
+- Do not extend thinking temperature or reasoning placeholder plugins for this Fireworks route
+- Strip request-level `reasoning`, `reasoning_effort`, and `reasoning_summary` when a custom model has `supportsReasoning: false`
 - Keep this model-specific; do not apply Moonshot behavior to all custom models
 
 Executor guard:
