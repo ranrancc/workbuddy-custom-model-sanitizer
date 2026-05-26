@@ -60,6 +60,7 @@ For custom models:
 - Convert content arrays to text for text-only custom models
 - Preserve and normalize OpenAI-style function tools when `supportsToolCall !== false`
 - Strip `tools` and `tool_choice` when `supportsToolCall === false`
+- Patch WorkBuddy's streaming OpenAI-to-tool-use adapter so a chunk with id `functions.Name:n` and an initially missing `function.name` uses `Name` as a fallback.
 - Convert unpaired tool results to user-visible text
 - Remove WorkBuddy-only metadata
 - Preserve tool calls when present

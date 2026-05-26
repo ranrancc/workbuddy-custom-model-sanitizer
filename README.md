@@ -43,6 +43,7 @@ It also balances strictness with useful model capabilities:
 - If `supportsImages` is not `true`, content arrays are flattened to text so text-only models do not receive unsupported image blocks.
 - If `supportsToolCall` is not `false`, `tools`, `tool_choice`, and assistant `tool_calls` are preserved but normalized to the OpenAI function-tool shape.
 - If `supportsToolCall` is `false`, `tools` and `tool_choice` are removed before the request is sent.
+- For streaming tool calls, if the first chunk has an id such as `functions.Agent:1` but no function name yet, the patch derives `Agent` from the id instead of letting WorkBuddy execute an empty tool name.
 
 WorkBuddy-only metadata is removed from outbound requests.
 
@@ -136,5 +137,6 @@ The bug is most likely to appear after multi-turn conversations, assistant histo
 - It aims for broad OpenAI Chat Completions compatibility, not every provider-specific extension.
 - Image support depends on the custom model config. Set `supportsImages` to `true` only when the provider/model really accepts OpenAI-style `image_url` blocks.
 - Tool support depends on the custom model config. Set `supportsToolCall` to `true` only when the provider/model accepts OpenAI-style function tools.
+- The streaming tool-name fallback is intentionally narrow. It only applies to WorkBuddy-style ids that start with `functions.`.
 - Provider-specific fields outside common OpenAI Chat Completions shape are intentionally dropped for strict compatibility.
 - This is not an official WorkBuddy patch.

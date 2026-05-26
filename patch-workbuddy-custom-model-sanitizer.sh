@@ -100,6 +100,33 @@ if (changed) {
 }
 NODE
 
+log "Patching streaming tool-call name fallback"
+node - "$CLI_BUNDLE" <<'NODE'
+const fs = require("fs");
+
+const file = process.argv[2];
+let text = fs.readFileSync(file, "utf8");
+
+const oldText =
+  'content_block:{type:"tool_use",id:ei.id,name:ei.function?.name||"",input:{}}}';
+
+const newText =
+  'content_block:{type:"tool_use",id:ei.id,name:ei.function?.name||("string"==typeof ei.id&&ei.id.startsWith("functions.")?ei.id.slice(10).split(":")[0]:""),input:{}}}';
+
+if (text.includes(newText)) {
+  console.log("streaming tool-call name fallback already patched");
+} else {
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) {
+    console.error(`expected one streaming tool-call fallback match, got ${count}`);
+    process.exit(2);
+  }
+  text = text.replace(oldText, newText);
+  fs.writeFileSync(file, text);
+  console.log("patched streaming tool-call name fallback");
+}
+NODE
+
 log "Checking JavaScript syntax"
 node --check "$CLI_BUNDLE" >/dev/null
 
