@@ -1,52 +1,57 @@
-# workbuddy-custom-model-sanitizer
+# workbuddy-openai-compatible-adapter
 
 Local patcher for WorkBuddy custom OpenAI-compatible models.
 
-It fixes a WorkBuddy 4.22.x custom-model compatibility issue where WorkBuddy can send internal message fields to strict OpenAI-compatible providers such as Fireworks.
+It fixes a WorkBuddy 4.22.x compatibility issue where the custom-model path can mix two protocols:
 
-Typical error:
+- WorkBuddy's internal conversation protocol, with UI/tracing/agent fields.
+- The provider wire protocol expected by OpenAI-compatible `/chat/completions` APIs.
+
+Strict providers such as Fireworks may reject the mixed request with errors like:
 
 ```text
 400 Extra inputs are not permitted, field: 'messages[1].agent', value: 'cli'
 ```
 
-Other possible rejected fields include:
+Other rejected fields can include:
 
 ```text
 messageId, model, traceId, conversationRequestId, rawUsage, usage, reasoning, annotations
 ```
 
-## What This Fixes
+## First Principles
 
-WorkBuddy keeps rich internal message objects for its own UI, traces, usage display, reasoning display, and agent bookkeeping. Those internal fields should not be sent to an OpenAI-compatible `/chat/completions` endpoint.
+The fix is not to make custom models "dumber". Image input and function tools are real OpenAI-compatible capabilities, and many providers support them.
 
-Some providers ignore unknown fields. Strict providers reject them.
+The correct boundary is an adapter:
 
-This patch adds a final sanitizer before WorkBuddy sends custom-model requests. For custom models, it keeps the request body close to the OpenAI Chat Completions shape:
+1. Before HTTP send, translate WorkBuddy's internal request into a strict OpenAI Chat Completions request.
+2. During streaming response handling, translate OpenAI-style incremental tool calls back into WorkBuddy's internal tool-use events.
+3. Keep narrow executor fallbacks as a final guard, not as the main design.
 
-```json
-{
-  "role": "user",
-  "content": "hello"
-}
-```
+## What The Patch Does
 
-It preserves common standard fields when present:
+Outbound request adapter:
 
-```text
-role, content, name, tool_calls, tool_call_id
-```
+- Keeps only wire-safe message fields: `role`, `content`, `name`, `tool_calls`, `tool_call_id`.
+- Normalizes roles to OpenAI-compatible values.
+- Preserves `image_url` content blocks when `supportsImages === true`.
+- Flattens content arrays to text when the model is text-only.
+- Preserves and normalizes OpenAI function tools when `supportsToolCall !== false`.
+- Removes `tools` and `tool_choice` when `supportsToolCall === false`.
+- Removes WorkBuddy-only metadata from outbound requests.
 
-It also balances strictness with useful model capabilities:
+Inbound streaming adapter:
 
-- If `supportsImages` is `true`, standard `image_url` content blocks are preserved and stripped down to `url` plus optional `detail`.
-- If `supportsImages` is not `true`, content arrays are flattened to text so text-only models do not receive unsupported image blocks.
-- If `supportsToolCall` is not `false`, `tools`, `tool_choice`, and assistant `tool_calls` are preserved but normalized to the OpenAI function-tool shape.
-- If `supportsToolCall` is `false`, `tools` and `tool_choice` are removed before the request is sent.
-- For streaming tool calls, if the first chunk has an id such as `functions.Agent:1` but no function name yet, the patch derives `Agent` from the id instead of letting WorkBuddy execute an empty tool name.
-- As a second guard, the tool executor also derives the tool name from `functions.Name:n` if the internal `toolCalls[].name` is still empty at execution time.
+- Accumulates streamed `tool_calls` by `index`.
+- Waits until a tool name is known before opening a WorkBuddy `tool_use` block.
+- Derives a name only for WorkBuddy-style ids such as `functions.Bash:2`.
+- Preserves accumulated argument deltas when the name arrives after earlier chunks.
+- Stops every started tool block at `finish_reason: "tool_calls"`.
 
-WorkBuddy-only metadata is removed from outbound requests.
+Executor fallback:
+
+- If WorkBuddy still reaches execution with an empty tool name but an id like `functions.Name:n`, it derives `Name` as a final guard.
 
 ## Supported Target
 
@@ -67,21 +72,27 @@ Expected app layout:
 Quit WorkBuddy first, then run:
 
 ```bash
-git clone https://github.com/YOUR_NAME/workbuddy-custom-model-sanitizer.git
+git clone https://github.com/ranrancc/workbuddy-custom-model-sanitizer.git
 cd workbuddy-custom-model-sanitizer
+bash patch-workbuddy-openai-compatible-adapter.sh
+```
+
+The old script name remains as a compatibility wrapper:
+
+```bash
 bash patch-workbuddy-custom-model-sanitizer.sh
 ```
 
 If WorkBuddy is installed somewhere else:
 
 ```bash
-WORKBUDDY_APP_PATH="/path/to/WorkBuddy.app" bash patch-workbuddy-custom-model-sanitizer.sh
+WORKBUDDY_APP_PATH="/path/to/WorkBuddy.app" bash patch-workbuddy-openai-compatible-adapter.sh
 ```
 
 For testing against a copied app bundle only, you can bypass the running-process guard:
 
 ```bash
-WORKBUDDY_SKIP_RUNNING_CHECK=1 WORKBUDDY_APP_PATH="/tmp/WorkBuddy.app" bash patch-workbuddy-custom-model-sanitizer.sh
+WORKBUDDY_SKIP_RUNNING_CHECK=1 WORKBUDDY_APP_PATH="/tmp/WorkBuddy.app" bash patch-workbuddy-openai-compatible-adapter.sh
 ```
 
 ## Restore
@@ -89,14 +100,10 @@ WORKBUDDY_SKIP_RUNNING_CHECK=1 WORKBUDDY_APP_PATH="/tmp/WorkBuddy.app" bash patc
 The script creates a timestamped backup under:
 
 ```text
-/Applications/WorkBuddy.app/Contents/Resources/workbuddy-custom-model-sanitizer-backups/
+/Applications/WorkBuddy.app/Contents/Resources/workbuddy-openai-compatible-adapter-backups/
 ```
 
-At the end of a successful run, it prints the exact restore command, for example:
-
-```bash
-cp '/Applications/WorkBuddy.app/Contents/Resources/workbuddy-custom-model-sanitizer-backups/codebuddy.js.20260526-120000.bak' '/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/dist/codebuddy.js'
-```
+At the end of a successful run, it prints the exact restore command.
 
 ## Custom Model Config Note
 
@@ -132,12 +139,11 @@ This issue is not Fireworks-specific. Any strict OpenAI-compatible provider may 
 
 The bug is most likely to appear after multi-turn conversations, assistant history, reasoning output, usage data, tool calls, or content block arrays enter the conversation history.
 
-## Balance And Limitations
+## Limitations
 
-- This patch is local and may be overwritten by WorkBuddy updates.
-- It aims for broad OpenAI Chat Completions compatibility, not every provider-specific extension.
-- Image support depends on the custom model config. Set `supportsImages` to `true` only when the provider/model really accepts OpenAI-style `image_url` blocks.
+- This is a local patch and may be overwritten by WorkBuddy updates.
+- It targets common OpenAI Chat Completions compatibility, not every provider-specific extension.
+- Image support depends on the custom model config. Set `supportsImages` to `true` only when the provider/model accepts OpenAI-style `image_url` blocks.
 - Tool support depends on the custom model config. Set `supportsToolCall` to `true` only when the provider/model accepts OpenAI-style function tools.
-- The streaming tool-name fallback is intentionally narrow. It only applies to WorkBuddy-style ids that start with `functions.`.
-- Provider-specific fields outside common OpenAI Chat Completions shape are intentionally dropped for strict compatibility.
+- Provider-specific fields outside the common OpenAI Chat Completions shape are intentionally dropped unless a documented provider-specific adapter is added.
 - This is not an official WorkBuddy patch.

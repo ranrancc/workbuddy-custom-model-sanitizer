@@ -6,9 +6,19 @@ This repository documents and patches a WorkBuddy custom-model compatibility bug
 
 Help OpenClaw, Claude Code, Codex, or another local coding agent understand and reproduce the fix for strict OpenAI-compatible custom model providers.
 
+## Patch Name
+
+Use this name for the actual design:
+
+```text
+workbuddy-openai-compatible-adapter
+```
+
+The old name, `workbuddy-custom-model-sanitizer`, is kept only as a compatibility wrapper because early versions of this repo used it.
+
 ## Problem Summary
 
-WorkBuddy 4.22.x can send internal message fields to custom OpenAI-compatible `/chat/completions` providers.
+WorkBuddy 4.22.x can send internal message objects to custom OpenAI-compatible `/chat/completions` providers.
 
 Example provider error:
 
@@ -24,13 +34,58 @@ agent, messageId, model, traceId, conversationRequestId, rawUsage, usage, reason
 
 These are WorkBuddy internal fields. They should remain in WorkBuddy's local state and traces, but they should not be sent to third-party model APIs.
 
-## Patch Name
+## First-Principles Model
 
-Use this name consistently:
+Treat this as a protocol-boundary bug, not as a model-selection bug.
 
-```text
-workbuddy-custom-model-sanitizer
-```
+WorkBuddy has an internal protocol:
+
+- Conversation metadata
+- Agent bookkeeping
+- Trace ids
+- Usage objects
+- Reasoning display state
+- Tool execution state
+
+OpenAI-compatible providers expect a wire protocol:
+
+- `messages[].role`
+- `messages[].content`
+- optional OpenAI-standard multimodal blocks
+- optional OpenAI-standard function tool schemas
+- optional assistant `tool_calls`
+- optional tool result `tool_call_id`
+
+The patch should translate at the boundary.
+
+## Intended Fix
+
+Patch WorkBuddy in three places.
+
+Outbound HTTP adapter:
+
+- Keep: `role`, `content`, `name`, `tool_calls`, `tool_call_id`
+- Normalize roles to OpenAI-compatible values
+- Preserve OpenAI-style `image_url` blocks when `supportsImages === true`
+- Convert content arrays to text for text-only custom models
+- Preserve and normalize OpenAI-style function tools when `supportsToolCall !== false`
+- Strip `tools` and `tool_choice` when `supportsToolCall === false`
+- Convert unpaired tool results to user-visible text
+- Remove WorkBuddy-only metadata
+- Leave WorkBuddy's local conversation storage alone
+
+Inbound streaming adapter:
+
+- Accumulate `delta.tool_calls` by `index`
+- Preserve id, name, and argument deltas independently
+- Open a WorkBuddy `tool_use` block only when the tool name is known
+- Use `functions.Name:n` ids as a narrow WorkBuddy-specific name fallback
+- Stop all started tool blocks at `finish_reason: "tool_calls"`
+
+Executor guard:
+
+- If an internal tool call still has an empty `name`, derive it from `functions.Name:n`
+- Keep this as a fuse, not the primary conversion layer
 
 ## Files Of Interest
 
@@ -48,33 +103,6 @@ Default local custom model config:
 
 In WorkBuddy 4.22.16, `models.json` is an array. Do not rewrite it as `{ "models": [...] }`, because that can break the WorkBuddy model picker UI.
 
-## Intended Fix
-
-Patch WorkBuddy's custom-model request path so outbound requests are sanitized before HTTP send.
-
-For custom models:
-
-- Keep: `role`, `content`, `name`, `tool_calls`, `tool_call_id`
-- Normalize roles to OpenAI-compatible values
-- Preserve OpenAI-style `image_url` blocks when `supportsImages === true`
-- Convert content arrays to text for text-only custom models
-- Preserve and normalize OpenAI-style function tools when `supportsToolCall !== false`
-- Strip `tools` and `tool_choice` when `supportsToolCall === false`
-- Patch WorkBuddy's streaming OpenAI-to-tool-use adapter so a chunk with id `functions.Name:n` and an initially missing `function.name` uses `Name` as a fallback.
-- Patch the tool execution path with the same `functions.Name:n` fallback because the UI stream event and internal `toolCalls` object are separate paths.
-- Convert unpaired tool results to user-visible text
-- Remove WorkBuddy-only metadata
-- Preserve tool calls when present
-- Leave WorkBuddy's local conversation storage alone
-
-The key idea is to sanitize at the outbound HTTP adapter layer, not only earlier in the request pipeline. Earlier plugins can be bypassed or followed by later transformations.
-
-Prefer capability-aware strictness:
-
-- Be strict about WorkBuddy private fields.
-- Be permissive about standard OpenAI capabilities the model declares, especially image input and function tools.
-- Drop provider-specific or unknown fields unless a documented provider-specific adapter is being added.
-
 ## Verification
 
 After patching:
@@ -85,10 +113,10 @@ node --check /Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cl
 
 Then fully quit and restart WorkBuddy.
 
-If debugging is needed, inspect WorkBuddy process args:
+If debugging is needed, inspect WorkBuddy logs and traces with targeted commands:
 
 ```bash
-ps aux | rg -i 'WorkBuddy|codebuddy|workbuddy'
+rg -n "Extra inputs|Tool  not found|tool_call|finish_reason|Error response" ~/.workbuddy/logs
 ```
 
 ## Safety
