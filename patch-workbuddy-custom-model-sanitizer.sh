@@ -127,6 +127,33 @@ if (text.includes(newText)) {
 }
 NODE
 
+log "Patching tool execution name fallback"
+node - "$CLI_BUNDLE" <<'NODE'
+const fs = require("fs");
+
+const file = process.argv[2];
+let text = fs.readFileSync(file, "utf8");
+
+const oldText =
+  'for(let ec of ei.toolCalls){let ei=await this.functionCallbackRegister.call(ec.name,ec.arguments,ea);el.push({id:ec.id,name:ec.name,responseData:ei})}';
+
+const newText =
+  'for(let ec of ei.toolCalls){let eu=ec.name||("string"==typeof ec.id&&ec.id.startsWith("functions.")?ec.id.slice(10).split(":")[0]:ec.name);let ei=await this.functionCallbackRegister.call(eu,ec.arguments,ea);el.push({id:ec.id,name:eu,responseData:ei})}';
+
+if (text.includes(newText)) {
+  console.log("tool execution name fallback already patched");
+} else {
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) {
+    console.error(`expected one tool execution fallback match, got ${count}`);
+    process.exit(2);
+  }
+  text = text.replace(oldText, newText);
+  fs.writeFileSync(file, text);
+  console.log("patched tool execution name fallback");
+}
+NODE
+
 log "Checking JavaScript syntax"
 node --check "$CLI_BUNDLE" >/dev/null
 

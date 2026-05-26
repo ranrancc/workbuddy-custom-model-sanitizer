@@ -44,6 +44,7 @@ It also balances strictness with useful model capabilities:
 - If `supportsToolCall` is not `false`, `tools`, `tool_choice`, and assistant `tool_calls` are preserved but normalized to the OpenAI function-tool shape.
 - If `supportsToolCall` is `false`, `tools` and `tool_choice` are removed before the request is sent.
 - For streaming tool calls, if the first chunk has an id such as `functions.Agent:1` but no function name yet, the patch derives `Agent` from the id instead of letting WorkBuddy execute an empty tool name.
+- As a second guard, the tool executor also derives the tool name from `functions.Name:n` if the internal `toolCalls[].name` is still empty at execution time.
 
 WorkBuddy-only metadata is removed from outbound requests.
 
