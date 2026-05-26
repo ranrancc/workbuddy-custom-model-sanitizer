@@ -37,7 +37,14 @@ It preserves common standard fields when present:
 role, content, name, tool_calls, tool_call_id
 ```
 
-It removes WorkBuddy-only metadata from outbound requests.
+It also balances strictness with useful model capabilities:
+
+- If `supportsImages` is `true`, standard `image_url` content blocks are preserved and stripped down to `url` plus optional `detail`.
+- If `supportsImages` is not `true`, content arrays are flattened to text so text-only models do not receive unsupported image blocks.
+- If `supportsToolCall` is not `false`, `tools`, `tool_choice`, and assistant `tool_calls` are preserved but normalized to the OpenAI function-tool shape.
+- If `supportsToolCall` is `false`, `tools` and `tool_choice` are removed before the request is sent.
+
+WorkBuddy-only metadata is removed from outbound requests.
 
 ## Supported Target
 
@@ -123,9 +130,11 @@ This issue is not Fireworks-specific. Any strict OpenAI-compatible provider may 
 
 The bug is most likely to appear after multi-turn conversations, assistant history, reasoning output, usage data, tool calls, or content block arrays enter the conversation history.
 
-## Limitations
+## Balance And Limitations
 
 - This patch is local and may be overwritten by WorkBuddy updates.
-- It focuses on text and normal tool-call compatibility.
-- For custom providers that need image content blocks, a provider-specific sanitizer may be safer than flattening content arrays to text.
+- It aims for broad OpenAI Chat Completions compatibility, not every provider-specific extension.
+- Image support depends on the custom model config. Set `supportsImages` to `true` only when the provider/model really accepts OpenAI-style `image_url` blocks.
+- Tool support depends on the custom model config. Set `supportsToolCall` to `true` only when the provider/model accepts OpenAI-style function tools.
+- Provider-specific fields outside common OpenAI Chat Completions shape are intentionally dropped for strict compatibility.
 - This is not an official WorkBuddy patch.

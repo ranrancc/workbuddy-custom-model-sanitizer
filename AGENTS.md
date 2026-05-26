@@ -56,13 +56,22 @@ For custom models:
 
 - Keep: `role`, `content`, `name`, `tool_calls`, `tool_call_id`
 - Normalize roles to OpenAI-compatible values
-- Convert text content arrays to strings for text-only custom models
+- Preserve OpenAI-style `image_url` blocks when `supportsImages === true`
+- Convert content arrays to text for text-only custom models
+- Preserve and normalize OpenAI-style function tools when `supportsToolCall !== false`
+- Strip `tools` and `tool_choice` when `supportsToolCall === false`
 - Convert unpaired tool results to user-visible text
 - Remove WorkBuddy-only metadata
 - Preserve tool calls when present
 - Leave WorkBuddy's local conversation storage alone
 
 The key idea is to sanitize at the outbound HTTP adapter layer, not only earlier in the request pipeline. Earlier plugins can be bypassed or followed by later transformations.
+
+Prefer capability-aware strictness:
+
+- Be strict about WorkBuddy private fields.
+- Be permissive about standard OpenAI capabilities the model declares, especially image input and function tools.
+- Drop provider-specific or unknown fields unless a documented provider-specific adapter is being added.
 
 ## Verification
 
