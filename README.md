@@ -49,6 +49,10 @@ Inbound streaming adapter:
 - Preserves accumulated argument deltas when the name arrives after earlier chunks.
 - Stops every started tool block at `finish_reason: "tool_calls"`.
 
+Model response adapter:
+
+- Before WorkBuddy looks up a `function_call` in its tool table, recovers an empty `name` from `call_id`, `callId`, or `id` when the value is a WorkBuddy-style id such as `functions.Bash:2`.
+
 Executor fallback:
 
 - If WorkBuddy still reaches execution with an empty tool name but an id like `functions.Name:n`, it derives `Name` as a final guard.

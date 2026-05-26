@@ -82,6 +82,11 @@ Inbound streaming adapter:
 - Use `functions.Name:n` ids as a narrow WorkBuddy-specific name fallback
 - Stop all started tool blocks at `finish_reason: "tool_calls"`
 
+Model response adapter:
+
+- In `resolveFunctionOrHandoff`, recover an empty `function_call.name` from `call_id`, `callId`, or `id` when it uses WorkBuddy's `functions.Name:n` pattern
+- This is the execution-side protocol boundary; UI stream events can look correct while this path still has an empty name
+
 Executor guard:
 
 - If an internal tool call still has an empty `name`, derive it from `functions.Name:n`

@@ -218,6 +218,33 @@ if (text.includes(newText)) {
 }
 NODE
 
+log "Patching model response tool-name adapter"
+node - "$CLI_BUNDLE" <<'NODE'
+const fs = require("fs");
+
+const file = process.argv[2];
+let text = fs.readFileSync(file, "utf8");
+
+const oldText =
+  'function resolveFunctionOrHandoff(ei,ea,el,ec){let eu=ea.get(ei.name);if(eu)return{type:"handoff",handoff:eu};let ed=findToolInMap(el,ei.name),ep=ed.tool;if(!ep){let ea=`Tool ${ei.name} not found in agent ${ec.name}.`;throw(0,eC.addErrorToCurrentSpan)({message:ea,data:{tool_name:ei.name,agent_name:ec.name}}),new eS.ModelBehaviorError(ea)}return ed.normalizedName!==ei.name&&(ei.name=ed.normalizedName),{type:"function",tool:ep}}';
+
+const newText =
+  'function resolveFunctionOrHandoff(ei,ea,el,ec){if(!ei.name){let ea=ei.call_id||ei.callId||ei.id;"string"==typeof ea&&ea.startsWith("functions.")&&(ei.name=ea.slice(10).split(":")[0])}let eu=ea.get(ei.name);if(eu)return{type:"handoff",handoff:eu};let ed=findToolInMap(el,ei.name),ep=ed.tool;if(!ep){let ea=`Tool ${ei.name} not found in agent ${ec.name}.`;throw(0,eC.addErrorToCurrentSpan)({message:ea,data:{tool_name:ei.name,agent_name:ec.name}}),new eS.ModelBehaviorError(ea)}return ed.normalizedName!==ei.name&&(ei.name=ed.normalizedName),{type:"function",tool:ep}}';
+
+if (text.includes(newText)) {
+  console.log("model response tool-name adapter already patched");
+} else {
+  const count = text.split(oldText).length - 1;
+  if (count !== 1) {
+    console.error(`expected one model response adapter match, got ${count}`);
+    process.exit(2);
+  }
+  text = text.replace(oldText, newText);
+  fs.writeFileSync(file, text);
+  console.log("patched model response tool-name adapter");
+}
+NODE
+
 log "Checking JavaScript syntax"
 node --check "$CLI_BUNDLE" >/dev/null
 
