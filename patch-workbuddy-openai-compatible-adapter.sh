@@ -245,6 +245,30 @@ if (text.includes(newText)) {
 }
 NODE
 
+log "Patching Kimi K2.6 custom model profile"
+node - "$CLI_BUNDLE" <<'NODE'
+const fs = require("fs");
+
+const file = process.argv[2];
+let text = fs.readFileSync(file, "utf8");
+
+const oldText = 'ID_PATTERNS=["kimi-k2.5","kimi-k2.6"]';
+const newText = 'ID_PATTERNS=["kimi-k2.5","kimi-k2.6","kimi-k2p6","kimi-k2p6-turbo"]';
+
+if (text.includes(newText)) {
+  console.log("Kimi K2.6 custom profile already patched");
+} else {
+  const count = text.split(oldText).length - 1;
+  if (count !== 3) {
+    console.error(`expected three Moonshot pattern matches, got ${count}`);
+    process.exit(2);
+  }
+  text = text.split(oldText).join(newText);
+  fs.writeFileSync(file, text);
+  console.log("patched Kimi K2.6 custom profile");
+}
+NODE
+
 log "Checking JavaScript syntax"
 node --check "$CLI_BUNDLE" >/dev/null
 

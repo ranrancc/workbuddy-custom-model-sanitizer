@@ -87,6 +87,12 @@ Model response adapter:
 - In `resolveFunctionOrHandoff`, recover an empty `function_call.name` from `call_id`, `callId`, or `id` when it uses WorkBuddy's `functions.Name:n` pattern
 - This is the execution-side protocol boundary; UI stream events can look correct while this path still has an empty name
 
+Kimi K2.6 profile:
+
+- WorkBuddy has built-in Moonshot/Kimi plugins for `kimi-k2.5` and `kimi-k2.6`
+- Extend those exact plugin patterns to also match `kimi-k2p6` and `kimi-k2p6-turbo`
+- Keep this model-specific; do not apply Moonshot behavior to all custom models
+
 Executor guard:
 
 - If an internal tool call still has an empty `name`, derive it from `functions.Name:n`

@@ -53,6 +53,11 @@ Model response adapter:
 
 - Before WorkBuddy looks up a `function_call` in its tool table, recovers an empty `name` from `call_id`, `callId`, or `id` when the value is a WorkBuddy-style id such as `functions.Bash:2`.
 
+Kimi K2.6 profile:
+
+- Extends WorkBuddy's built-in Moonshot/Kimi request plugins from `kimi-k2.5` and `kimi-k2.6` to also match Fireworks-style ids containing `kimi-k2p6` or `kimi-k2p6-turbo`.
+- This lets custom Kimi K2.6 routes reuse WorkBuddy's existing Kimi handling instead of relying only on generic custom-model cleanup.
+
 Executor fallback:
 
 - If WorkBuddy still reaches execution with an empty tool name but an id like `functions.Name:n`, it derives `Name` as a final guard.
